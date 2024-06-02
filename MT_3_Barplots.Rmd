@@ -1,0 +1,192 @@
+---
+title: "Overlap barplots"
+author: "Kai Shaman"
+date: "12-09-2023"
+note: "Calculation and Visualisation of Unique and Shared Neurons (for the Pre-Language, English and Greek conditions separately)"
+Note: Make sure you run this script 3 times: for the Pre-Language, English and Greek condition separately (change the variables "figurename" (line 23) and "filename" (line 24)).
+---
+```{r, include=FALSE} 
+# LOAD THE PACKAGES
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(hrbrthemes)
+library(Rmisc)
+library(ggsignif)
+```
+
+```{r General variables, include = FALSE}
+### SET GENERAL VARIABLES
+directory <- getwd() # get path to directory with files (in this case, they are in the same folder as the script)
+dir.create(file.path(getwd(), "Barplots")) # create subfolder to save the results
+dir.create(file.path(getwd(), "ANOVA")) # create subfolder to save the results
+
+figurename <- "Pre-Language" # set the condition name to be shown on the figures: "Pre-Language", "English", or "Greek"
+filename <- "data_1Stage.csv" # set the name of the file: "data_1Stage.csv", "data_EN.csv", or "data_GR.csv"
+
+n <- 16 # set the number of network instances (overall, both valid and invalid)
+rejected <- c(6,11,13) # indicate invalid networks
+n_valid <- n-length(rejected) # save the number of valid networks
+m <- 8 # set the number of cell assemblies (patterns) in one data file
+area_size <- 625 # number of neurons in one area
+ca_size <- 7500 # number of neurons in all areas
+interest <- c(1:4) # the CAs that we want to compare (in this case, CA1, CA2, CA3 and CA4)
+blue_cas <- c("Blue1","Blue2")
+green_cas <- c("Green1","Green2")
+ca_names <- c("Blue1","Blue2","Green1","Green2","Word1","Word2","Word3","Word4") # create a list of names for each pattern's cell assembly (will be used as column names)
+area_list <- c("V1","TO","AT","PFL","PML","M1L","A1","AB","PB","PFI","PMI","M1I") # create list of areas
+list_extra <- c("V1","TO","AT","PFL","PML","M1L")
+list_peri <- c("A1","AB","PB","PFI","PMI","M1I")
+list_primary <- c("V1","M1L","A1","M1I")
+list_secondary <- c("TO","PML","AB","PMI")
+list_central <- c("AT","PFL","PB","PFI")
+list_visual <- c("V1","TO","AT")
+list_motor <- c("PFL","PML","M1L")
+list_auditory <- c("A1","AB","PB")
+list_articulatory <- c("PFI","PMI","M1I")
+```
+
+```{r STAGE 1: Preparing the raw data (single file), include = FALSE}
+### RUN ONLY IF YOU HAVE DATA FROM ALL NETWORKS IN ONE FILE, COMMENT OUT IF NOT
+ca_data <- read.csv(filename, header=FALSE) # load the file
+ca_data <- data.frame(t(ca_data)) # transpose, if necessary
+ca_data <- ca_data[3:nrow(ca_data),] # delete the first 2 rows (the CA names)
+ca_data <- split.default(ca_data, gl(ncol(ca_data)/m, m)) # split the dataframe into a list of dataframes
+# Loop through each file, rename the columns and save in separate dataframes:
+ca_data_list <- list() # create empty list for a loop (it will be list of separate dataframes for each network)
+for(i in 1:n) {
+ tmp <- ca_data[[i]]
+ colnames(tmp) <- ca_names
+ ca_data_list[[i]] <- tmp}
+rm(tmp, ca_data) # remove the variables not needed anymore
+
+### ADD AREA AND NETWORK INFO TO EACH NETWORK'S DATAFRAME
+ca_data_list_areas <- list() # create empty list where dataframes with added info will be saved
+# Loop through the dataframes, add info about areas to each, and save in the new list
+for(i in 1:n) {
+ tmp <- ca_data_list[[i]][interest]
+ tmp$Network <- rep(i, times=ca_size)
+ tmp$Area <- rep(area_list, each=area_size)
+ tmp <- tmp %>% mutate(AreaLang = if_else(Area %in% list_extra == TRUE, "extra", "peri"))
+ tmp <- tmp %>% mutate(AreaType = if_else(Area %in% list_primary == TRUE, "primary", if_else(Area %in% list_secondary == TRUE, "secondary", "central")))
+ tmp <- tmp %>% mutate(System = if_else(Area %in% list_visual == TRUE, "visual", if_else(Area %in% list_motor == TRUE, "motor", if_else(Area %in% list_auditory == TRUE, "auditory", "articulatory"))))
+ca_data_list_areas[[i]] <- tmp}
+
+### Combining data from valid networks into one dataframe
+ca_data_list_valid <- ca_data_list_areas[- rejected] # remove rejected networks from the list
+data <- do.call("rbind", ca_data_list_valid) # combine dataframes from the list into one dataframe
+```
+
+```{r, STAGE 1: Preparing the dataframe on overlap/unique neurons IN ABSOL. NUMBERS, include=FALSE}
+# ADD INFO ON WHETHER A CELL IS SHARED BETWEEN CAs OF TWO SHADES OF THE SAME COLOR OR UNIQUE
+for(i in interest) {data[,i] <- as.numeric(data[,i])} # To check overlap with mutate(), convert cell values to numeric
+data_count <- data
+# Count average number of neurons between 2 "blue" CAs and between 2 "green" CAs:
+data_count$Blue_Mean <- rowSums(data[,blue_cas])/length(blue_cas)
+data_count$Green_Mean <- rowSums(data[,green_cas])/length(green_cas)
+# Count shared neurons:
+data_count <- data_count %>% mutate(Blue_OverlapN = if_else(rowSums(data[,blue_cas]) == 2, "1","0"))
+data_count <- data_count %>% mutate(Green_OverlapN = if_else(rowSums(data[,green_cas]) == 2, "1","0"))
+# Count unique neurons:
+data_count <- data_count %>% mutate(Unique_Blue1 = if_else(data[,blue_cas[1]] == 1 & rowSums(data[,blue_cas]) == 1, "1","0"))
+data_count <- data_count %>% mutate(Unique_Blue2 = if_else(data[,blue_cas[2]] == 1 & rowSums(data[,blue_cas]) == 1, "1","0"))
+data_count <- data_count %>% mutate(Unique_Green1 = if_else(data[,green_cas[1]] == 1 & rowSums(data[,green_cas]) == 1, "1","0"))
+data_count <- data_count %>% mutate(Unique_Green2 = if_else(data[,green_cas[2]] == 1 & rowSums(data[,green_cas]) == 1, "1","0"))
+for(i in c((ncol(data)+1):ncol(data_count))) {data_count[,i] <- as.numeric(data_count[,i])} # Convert the values of the new columns to numeric for later analysis
+# Count average number of unique neurons between 2 "blue" CAs and between 2 "green" CAs:
+data_count$Blue_UniqueN <- rowSums(data_count[,grep("Unique_Blue", colnames(data_count))])/length(blue_cas)
+data_count$Green_UniqueN <- rowSums(data_count[,grep("Unique_Green", colnames(data_count))])/length(green_cas)
+for(i in c((ncol(data)+1):ncol(data_count))) {data_count[,i] <- as.numeric(data_count[,i])} # Convert the values of the new columns to numeric for later analysis
+
+# COMPUTE THE SUM OF ALL SHARED AND THE SUM OF ALL UNIQUE NEURONS FOR EACH AREA FOR EACH NETWORK
+data_count$Area <- factor(data_count$Area, levels = unique(data_count$Area)) # turn Area into a factor so the order of areas stays the same
+data_aggr <- aggregate(cbind(Blue1,Blue2,Green1,Green2,Blue_Mean,Green_Mean,Blue_OverlapN,Green_OverlapN,Unique_Blue1,Unique_Blue2,Unique_Green1,Unique_Green2,Blue_UniqueN,Green_UniqueN) ~ Network + AreaLang + AreaType + System + Area, data = data_count, FUN = sum)
+data_aggr$AreaLang <- factor(data_aggr$AreaLang, levels = unique(data_aggr$AreaLang)) # turn types of areas into factors so their order stays the same (in analysis below)
+data_aggr$AreaType <- factor(data_aggr$AreaType, levels = unique(data_aggr$AreaType))
+data_aggr$System <- factor(data_aggr$System, levels = unique(data_aggr$System))
+
+# PREPARE DATAFRAME ON OVERLAP ABSOLUTE NUMBERS FOR ANALYSIS
+# Select relevant columns:
+number_raw <- data_aggr[,c("Network","Area","AreaLang","AreaType","System","Blue_UniqueN","Blue_OverlapN","Green_UniqueN","Green_OverlapN")] 
+# Reshape data into long format:
+number <- gather(number_raw, Condition, AbsoluteNo, Blue_UniqueN:Green_OverlapN, factor_key=TRUE)
+number <- number %>% separate(Condition,c("Color", "Neuron_Type"), sep = "_")
+number <- number %>% mutate(across(everything(), ~replace(.x, is.nan(.x), 0)))
+```
+
+# Number of shared & unique neurons (ALL AREAS)
+```{r, echo=FALSE}
+number_all_raw <- number[!names(number) %in% c("Area", "AreaLang", "AreaType", "System")]
+number_all <- number_all_raw %>% group_by(Network, Color, Neuron_Type) %>% summarise_all(sum)
+number_all_mean <- summarySE(number_all, measurevar="AbsoluteNo", groupvars=c("Neuron_Type","Color"))
+plot_number_all <- ggplot(number_all_mean, aes(fill=Color, y=AbsoluteNo, x=Neuron_Type)) +
+    geom_bar(position="dodge", stat="identity") +
+    geom_errorbar( aes(x=Neuron_Type, ymin=AbsoluteNo-se, ymax=AbsoluteNo+se), width=0.2, colour="black", alpha=0.9, linewidth=0.5, position=position_dodge(0.9)) +
+    ggtitle(paste0(figurename, " (All)")) +
+    scale_fill_manual(values = c("blue","darkgreen")) +
+    theme(legend.position="none", plot.title = element_text(size = 40, hjust = 0.5), axis.title=element_text(size=35), axis.text.y=element_text(size=30, color ="black"), axis.text.x=element_text(size=20, color ="black"), strip.text.x = element_text(size = 25)) +
+    scale_x_discrete(labels=c("OverlapN" = "Shared", "UniqueN" = "Unique")) +
+    ylim(0,80) +
+    xlab("") + ylab("Number of neurons")
+ggsave(plot_number_all, file=file.path('Barplots',paste0("All_", figurename, ".png")))
+plot_number_all
+```
+
+# Number of shared & unique neurons (HUB AREAS)
+```{r, echo=FALSE}
+number_hub_raw <- filter(number, Area %in% c("AT","PFL","PB", "PFi"))
+number_hub_raw <- number_hub_raw[!names(number_hub_raw) %in% c("Area", "AreaLang", "AreaType", "System")]
+number_hub <- number_hub_raw %>% group_by(Network, Color, Neuron_Type) %>% summarise_all(sum)
+number_hub_mean <- summarySE(number_hub, measurevar="AbsoluteNo", groupvars=c("Neuron_Type","Color"))
+plot_number_hub <- ggplot(number_hub_mean, aes(fill=Color, y=AbsoluteNo, x=Neuron_Type)) +
+    geom_bar(position="dodge", stat="identity") +
+    geom_errorbar( aes(x=Neuron_Type, ymin=AbsoluteNo-se, ymax=AbsoluteNo+se), width=0.2, colour="black", alpha=0.9, linewidth=0.5, position=position_dodge(0.9)) +
+    ggtitle(paste0(figurename, " (Hub)")) +
+    scale_fill_manual(values = c("blue","darkgreen")) +
+    theme(legend.position="none", plot.title = element_text(size = 40, hjust = 0.5), axis.title=element_text(size=35), axis.text.y=element_text(size=30, color ="black"), axis.text.x=element_text(size=20, color ="black"), strip.text.x = element_text(size = 25)) +
+    scale_x_discrete(labels=c("OverlapN" = "Shared", "UniqueN" = "Unique")) +
+    ylim(0,40) +
+    xlab("") + ylab("Number of neurons")
+ggsave(plot_number_hub, file=file.path('Barplots',paste0("Hub_", figurename, ".png")))
+plot_number_hub
+```
+
+# Number of shared & unique neurons (visual system)
+```{r, echo=FALSE}
+number_system_raw <- number[!names(number) %in% c("Area", "AreaLang", "AreaType")]
+number_system <- number_system_raw %>% group_by(Network, Color, Neuron_Type, System) %>% summarise_all(sum)
+number_system_mean <- summarySE(number_system, measurevar="AbsoluteNo", groupvars=c("Color", "Neuron_Type","System"),na.rm = TRUE)
+plot_number_system <- ggplot(number_system_mean, aes(fill=Color, y=AbsoluteNo, x=Neuron_Type)) + 
+    geom_bar(position="dodge", stat="identity") +
+    geom_errorbar( aes(x=Neuron_Type, ymin=AbsoluteNo-se, ymax=AbsoluteNo+se), width=0.2, colour="black", alpha=0.9, linewidth=0.5, position=position_dodge(0.9)) +
+    ggtitle(paste0(figurename)) +
+    facet_wrap(~System) +
+    scale_fill_manual(values = c("blue","darkgreen")) +
+    theme(legend.position="right") +
+    ylim(0,30) +
+    xlab("")
+ggsave(plot_number_system, file=file.path('Barplots',paste0("System_", figurename, ".png")))
+plot_number_system
+```
+
+# Number of shared & unique neurons (individual areas)
+```{r, echo=FALSE}
+number_mean <- summarySE(number, measurevar="AbsoluteNo", groupvars=c("Neuron_Type","Color", "Area", "AreaType","System"))
+plot_number_12 <- ggplot(number_mean, aes(fill=Color, y=AbsoluteNo, x=Neuron_Type)) + 
+    geom_bar(position="dodge", stat="identity") +
+    geom_errorbar( aes(x=Neuron_Type, ymin=AbsoluteNo-se, ymax=AbsoluteNo+se), width=0.2, colour="black", alpha=0.9, linewidth=0.5, position=position_dodge(0.9)) +
+    ggtitle(paste0(figurename)) +
+    facet_wrap(~Area, ncol=6, nrow=2) +
+    scale_fill_manual(values = c("blue","darkgreen")) +
+    theme(legend.position="none", plot.title = element_text(size = 40, hjust = 0.5), axis.title=element_text(size=35), axis.text.y=element_text(size=30, color ="black"), axis.text.x=element_text(size=20, color ="black", angle = 90), strip.text.x = element_text(size = 25)) +
+    scale_x_discrete(labels=c("OverlapN" = "Shared", "UniqueN" = "Unique")) +
+    ylim(0,20) +
+    xlab("") + ylab("")
+ggsave(plot_number_12, file=file.path('Barplots',paste0("Individual_", figurename, ".png")))
+plot_number_12
+```
+
+```{r Saving the data on absolute numbers and percentages of unique and shared neurons to csv files, include=FALSE}
+# Save raw dataframes for further analysis (comparing Neuron_Type between models)
+write.csv(number, file=file.path("ANOVA",paste0("data_shared_neurons_", figurename, ".csv")), row.names=FALSE)
+```

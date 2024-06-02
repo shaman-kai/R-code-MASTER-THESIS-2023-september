@@ -1,0 +1,440 @@
+---
+title: "ANOVA_unique_vs_shared"
+author: "Kai Shaman"
+date: "12-09-2023"
+note: "ANOVAs comparing numbers of Unique and Shared Neurons between conditions"
+---
+# ALL AREAS
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# LOAD PACKAGES
+library(grid)
+library(rstatix)
+library(ggplot2)
+library(data.table)
+library(ggpubr)
+library(Rmisc)
+library(gridExtra)
+library(ggsignif)
+options(scipen = 999)
+```
+
+```{r, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+# LOAD DATAFRAMES WITH Percent_shared MEASURES FOR EACH AREA FOR PLOTTING AND DATAFRAMES WITH Percent_shared MEASURES FOR WHOLE NETWORKS (ACROSS ALL AREAS) FOR ANOVA
+directory <- file.path(getwd(), "ANOVA") # get path to directory with files
+
+list_data <- list.files(path=directory, pattern="shared_neurons", all.files=TRUE,full.names=TRUE) 
+data1 <- read.csv(list_data[[1]])
+data1$Condition <- "English"
+data2 <- read.csv(list_data[[2]])
+data2$Condition <- "Greek"
+data3 <- read.csv(list_data[[3]])
+data3$Condition <- "Pre-Language"
+
+data_all <- rbind(data1, data2, data3)
+data_all$Neuron_Type[data_all$Neuron_Type == 'UniqueN'] <- 'Unique'
+data_all$Neuron_Type[data_all$Neuron_Type == 'OverlapN'] <- 'Shared'
+data_all_sum <- ddply(data_all, c("Network", "Condition", "Neuron_Type", "Color"),numcolwise(sum), na.rm=TRUE)
+pre_en_all <- data_all_sum %>%  filter(Condition %in% c("Pre-Language","English"))
+pre_gr_all <- data_all_sum %>%  filter(Condition %in% c("Pre-Language","Greek"))
+
+data_hub <- data_all %>% filter(Area %in% c("AT","PFL","PB","PFI"))
+data_hub_sum <- ddply(data_hub, c("Network", "Condition", "Neuron_Type", "Color"),numcolwise(sum), na.rm=TRUE)
+pre_en_hub <- data_hub_sum %>%  filter(Condition %in% c("Pre-Language","English"))
+pre_gr_hub <- data_hub_sum %>%  filter(Condition %in% c("Pre-Language","Greek"))
+
+data_visual <- data_all %>% filter(Area %in% c("V1","AT","TO"))
+data_visual_sum <- ddply(data_visual, c("Network", "Condition", "Neuron_Type", "Color"),numcolwise(sum), na.rm=TRUE)
+pre_en_visual <- data_visual_sum %>%  filter(Condition %in% c("Pre-Language","English"))
+pre_gr_visual <- data_visual_sum %>%  filter(Condition %in% c("Pre-Language","Greek"))
+
+data_at <- data_all %>% filter(Area %in% c("AT"))
+data_at_sum <- ddply(data_at, c("Network", "Condition", "Neuron_Type", "Color"),numcolwise(sum), na.rm=TRUE)
+pre_en_at <- data_at_sum %>%  filter(Condition %in% c("Pre-Language","English"))
+pre_gr_at <- data_at_sum %>%  filter(Condition %in% c("Pre-Language","Greek"))
+
+data_to <- data_all %>% filter(Area %in% c("TO"))
+data_to_sum <- ddply(data_to, c("Network", "Condition", "Neuron_Type", "Color"),numcolwise(sum), na.rm=TRUE)
+pre_en_to <- data_to_sum %>%  filter(Condition %in% c("Pre-Language","English"))
+pre_gr_to <- data_to_sum %>%  filter(Condition %in% c("Pre-Language","Greek"))
+```
+
+# ALL AREAS
+# PRE-LANGUAGE VS. ENGLISH (ALL AREAS): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_en_all <- anova_test(data = pre_en_all, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_en_all <- as.data.frame(get_anova_table(anova_pre_en_all, correction = "GG"))
+write.csv(anova_pre_en_all, file=file.path("ANOVA",paste0("all_pre_en_anova.csv")))
+anova_pre_en_all
+```
+# PRE-LANGUAGE VS. ENGLISH (ALL AREAS): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_all_pre_en <- pre_en_all %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_all_pre_en, file=file.path("ANOVA",paste0("all_pre_en_pairwise.csv")))
+pairwise_all_pre_en
+```
+# PRE-LANGUAGE VS. GREEK (ALL AREAS): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_gr_all <- anova_test(data = pre_gr_all, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_gr_all <- as.data.frame(get_anova_table(anova_pre_gr_all, correction = "GG"))
+write.csv(anova_pre_gr_all, file=file.path("ANOVA",paste0("all_pre_gr_anova.csv")))
+anova_pre_gr_all
+```
+# PRE-LANGUAGE VS. GREEK (ALL AREAS): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_all_pre_gr <- pre_gr_all %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_all_pre_gr, file=file.path("ANOVA",paste0("all_pre_gr_pairwise.csv")))
+pairwise_all_pre_gr
+```
+# SHARED NEURONS (ALL AREAS): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_all_shared <- pre_en_all %>% filter(Neuron_Type %in% c("Shared"))
+pre_gr_all_shared <- pre_gr_all %>% filter(Neuron_Type %in% c("Shared"))
+ansh_sum_st1_en <- summarySE(pre_en_all_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+ansh_sum_st1_gr <- summarySE(pre_gr_all_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+all_ansh_plot_st1_en <- ggplot(ansh_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-2, 85) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_all_pre_en[pairwise_all_pre_en$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(85,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("All areas (shared)") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+all_ansh_plot_st1_gr <- ggplot(ansh_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-2, 85) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_all_pre_gr[pairwise_all_pre_gr$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(85,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+all_ansh_plot_st1_en_gr <- grid.arrange(all_ansh_plot_st1_en, all_ansh_plot_st1_gr, ncol=2)
+ggsave(all_ansh_plot_st1_en_gr, file=file.path("ANOVA",paste0("all_shared_boxplot.png")))
+```
+# UNIQUE NEURONS (ALL AREAS): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_all_unique <- pre_en_all %>% filter(Neuron_Type %in% c("Unique"))
+pre_gr_all_unique <- pre_gr_all %>% filter(Neuron_Type %in% c("Unique"))
+anun_sum_st1_en <- summarySE(pre_en_all_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+anun_sum_st1_gr <- summarySE(pre_gr_all_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+all_anun_plot_st1_en <- ggplot(anun_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-2, 85) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_all_pre_en[pairwise_all_pre_en$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(82,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("All areas (unique)") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+all_anun_plot_st1_gr <- ggplot(anun_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-2, 85) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_all_pre_gr[pairwise_all_pre_gr$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(82,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+all_anun_plot_st1_en_gr <- grid.arrange(all_anun_plot_st1_en, all_anun_plot_st1_gr, ncol=2)
+ggsave(all_anun_plot_st1_en_gr, file=file.path("ANOVA",paste0("all_unique_boxplot.png")))
+```
+
+# HUB AREAS
+# PRE-LANGUAGE VS. ENGLISH (HUB AREAS): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_en_hub <- anova_test(data = pre_en_hub, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_en_hub <- as.data.frame(get_anova_table(anova_pre_en_hub, correction = "GG"))
+write.csv(anova_pre_en_hub, file=file.path("ANOVA",paste0("hub_pre_en_anova.csv")))
+anova_pre_en_hub
+```
+# PRE-LANGUAGE VS. ENGLISH (HUB AREAS): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_hub_pre_en <- pre_en_hub %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_hub_pre_en, file=file.path("ANOVA",paste0("hub_pre_en_pairwise.csv")))
+pairwise_hub_pre_en
+```
+# PRE-LANGUAGE VS. GREEK (HUB AREAS): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_gr_hub <- anova_test(data = pre_gr_hub, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_gr_hub <- as.data.frame(get_anova_table(anova_pre_gr_hub, correction = "GG"))
+write.csv(anova_pre_gr_hub, file=file.path("ANOVA",paste0("hub_pre_gr_anova.csv")))
+anova_pre_gr_hub
+```
+# PRE-LANGUAGE VS. GREEK (HUB AREAS): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_hub_pre_gr <- pre_gr_hub %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_hub_pre_gr, file=file.path("ANOVA",paste0("hub_pre_gr_pairwise.csv")))
+pairwise_hub_pre_gr
+```
+# SHARED NEURONS (HUB AREAS): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_hub_shared <- pre_en_hub %>% filter(Neuron_Type %in% c("Shared"))
+pre_gr_hub_shared <- pre_gr_hub %>% filter(Neuron_Type %in% c("Shared"))
+ansh_sum_st1_en <- summarySE(pre_en_hub_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+ansh_sum_st1_gr <- summarySE(pre_gr_hub_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+hub_ansh_plot_st1_en <- ggplot(ansh_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 50) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_hub_pre_en[pairwise_hub_pre_en$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(45, -3), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Hub areas (shared)") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+hub_ansh_plot_st1_gr <- ggplot(ansh_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 50) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_hub_pre_gr[pairwise_hub_pre_gr$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(-3, 35), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+hub_ansh_plot_st1_en_gr <- grid.arrange(hub_ansh_plot_st1_en, hub_ansh_plot_st1_gr, ncol=2)
+ggsave(hub_ansh_plot_st1_en_gr, file=file.path("ANOVA",paste0("hub_shared_boxplot.png")))
+```
+# UNIQUE NEURONS (HUB AREAS): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_hub_unique <- pre_en_hub %>% filter(Neuron_Type %in% c("Unique"))
+pre_gr_hub_unique <- pre_gr_hub %>% filter(Neuron_Type %in% c("Unique"))
+anun_sum_st1_en <- summarySE(pre_en_hub_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+anun_sum_st1_gr <- summarySE(pre_gr_hub_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+hub_anun_plot_st1_en <- ggplot(anun_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 50) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_hub_pre_en[pairwise_hub_pre_en$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(20,-2), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Hub areas (unique)") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+hub_anun_plot_st1_gr <- ggplot(anun_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 50) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_hub_pre_gr[pairwise_hub_pre_gr$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(35,-2), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+hub_anun_plot_st1_en_gr <- grid.arrange(hub_anun_plot_st1_en, hub_anun_plot_st1_gr, ncol=2)
+ggsave(hub_anun_plot_st1_en_gr, file=file.path("ANOVA",paste0("hub_unique_boxplot.png")))
+```
+
+# VISUAL AREAS
+# PRE-LANGUAGE VS. ENGLISH (VISUAL AREAS): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_en_visual <- anova_test(data = pre_en_visual, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_en_visual <- as.data.frame(get_anova_table(anova_pre_en_visual, correction = "GG"))
+write.csv(anova_pre_en_visual, file=file.path("ANOVA",paste0("visual_pre_en_anova.csv")))
+anova_pre_en_visual
+```
+# PRE-LANGUAGE VS. ENGLISH (VISUAL AREAS): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_visual_pre_en <- pre_en_visual %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_visual_pre_en, file=file.path("ANOVA",paste0("visual_pre_en_pairwise.csv")))
+pairwise_visual_pre_en
+```
+# PRE-LANGUAGE VS. GREEK (VISUAL AREAS): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_gr_visual <- anova_test(data = pre_gr_visual, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_gr_visual <- as.data.frame(get_anova_table(anova_pre_gr_visual, correction = "GG"))
+write.csv(anova_pre_gr_visual, file=file.path("ANOVA",paste0("visual_pre_gr_anova.csv")))
+anova_pre_gr_visual
+```
+# PRE-LANGUAGE VS. GREEK (VISUAL AREAS): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_visual_pre_gr <- pre_gr_visual %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_visual_pre_gr, file=file.path("ANOVA",paste0("visual_pre_gr_pairwise.csv")))
+pairwise_visual_pre_gr
+```
+# SHARED NEURONS (VISUAL AREAS): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_visual_shared <- pre_en_visual %>% filter(Neuron_Type %in% c("Shared"))
+pre_gr_visual_shared <- pre_gr_visual %>% filter(Neuron_Type %in% c("Shared"))
+ansh_sum_st1_en <- summarySE(pre_en_visual_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+ansh_sum_st1_gr <- summarySE(pre_gr_visual_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+visual_ansh_plot_st1_en <- ggplot(ansh_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-2, 30) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_visual_pre_en[pairwise_visual_pre_en$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(0,20), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Visual areas (shared)") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+visual_ansh_plot_st1_gr <- ggplot(ansh_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-2, 30) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_visual_pre_gr[pairwise_visual_pre_gr$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(0,20), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+visual_ansh_plot_st1_en_gr <- grid.arrange(visual_ansh_plot_st1_en, visual_ansh_plot_st1_gr, ncol=2)
+ggsave(visual_ansh_plot_st1_en_gr, file=file.path("ANOVA",paste0("visual_shared_boxplot.png")))
+```
+# UNIQUE NEURONS (VISUAL AREAS): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_visual_unique <- pre_en_visual %>% filter(Neuron_Type %in% c("Unique"))
+pre_gr_visual_unique <- pre_gr_visual %>% filter(Neuron_Type %in% c("Unique"))
+anun_sum_st1_en <- summarySE(pre_en_visual_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+anun_sum_st1_gr <- summarySE(pre_gr_visual_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+visual_anun_plot_st1_en <- ggplot(anun_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(0, 32) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_visual_pre_en[pairwise_visual_pre_en$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(30,20), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Visual areas (unique)") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+visual_anun_plot_st1_gr <- ggplot(anun_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(0, 32) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_visual_pre_gr[pairwise_visual_pre_gr$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(32,20), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+visual_anun_plot_st1_en_gr <- grid.arrange(visual_anun_plot_st1_en, visual_anun_plot_st1_gr, ncol=2)
+ggsave(visual_anun_plot_st1_en_gr, file=file.path("ANOVA",paste0("visual_unique_boxplot.png")))
+```
+
+# VISUAL HUB (AT)
+# PRE-LANGUAGE VS. ENGLISH (AT): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_en_at <- anova_test(data = pre_en_at, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_en_at <- as.data.frame(get_anova_table(anova_pre_en_at, correction = "GG"))
+write.csv(anova_pre_en_at, file=file.path("ANOVA",paste0("visual_at_pre_en_anova.csv")))
+anova_pre_en_at
+```
+# PRE-LANGUAGE VS. ENGLISH (AT): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_at_pre_en <- pre_en_at %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_at_pre_en, file=file.path("ANOVA",paste0("visual_at_pre_en_pairwise.csv")))
+pairwise_at_pre_en
+```
+# PRE-LANGUAGE VS. GREEK (AT): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_gr_at <- anova_test(data = pre_gr_at, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_gr_at <- as.data.frame(get_anova_table(anova_pre_gr_at, correction = "GG"))
+write.csv(anova_pre_gr_at, file=file.path("ANOVA",paste0("visual_at_pre_gr_anova.csv")))
+anova_pre_gr_at
+```
+# PRE-LANGUAGE VS. GREEK (AT): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_at_pre_gr <- pre_gr_at %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_at_pre_gr, file=file.path("ANOVA",paste0("visual_at_pre_gr_pairwise.csv")))
+pairwise_at_pre_gr
+```
+# SHARED NEURONS (AT): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_at_shared <- pre_en_at %>% filter(Neuron_Type %in% c("Shared"))
+pre_gr_at_shared <- pre_gr_at %>% filter(Neuron_Type %in% c("Shared"))
+ansh_sum_st1_en <- summarySE(pre_en_at_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+ansh_sum_st1_gr <- summarySE(pre_gr_at_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+at_ansh_plot_st1_en <- ggplot(ansh_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 30) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_at_pre_en[pairwise_at_pre_en$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(-3,12), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Visual hub (AT), shared") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+at_ansh_plot_st1_gr <- ggplot(ansh_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 30) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_at_pre_gr[pairwise_at_pre_gr$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(-3,12), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+at_ansh_plot_st1_en_gr <- grid.arrange(at_ansh_plot_st1_en, at_ansh_plot_st1_gr, ncol=2)
+ggsave(at_ansh_plot_st1_en_gr, file=file.path("ANOVA",paste0("visual_at_shared_boxplot.png")))
+```
+# UNIQUE NEURONS (AT): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_at_unique <- pre_en_at %>% filter(Neuron_Type %in% c("Unique"))
+pre_gr_at_unique <- pre_gr_at %>% filter(Neuron_Type %in% c("Unique"))
+anun_sum_st1_en <- summarySE(pre_en_at_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+anun_sum_st1_gr <- summarySE(pre_gr_at_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+at_anun_plot_st1_en <- ggplot(anun_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(0, 32) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_at_pre_en[pairwise_at_pre_en$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(10,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Visual hub (AT), unique") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+at_anun_plot_st1_gr <- ggplot(anun_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(0, 32) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_at_pre_gr[pairwise_at_pre_gr$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(10,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+at_anun_plot_st1_en_gr <- grid.arrange(at_anun_plot_st1_en, at_anun_plot_st1_gr, ncol=2)
+ggsave(at_anun_plot_st1_en_gr, file=file.path("ANOVA",paste0("visual_at_unique_boxplot.png")))
+```
+
+# SECONDARY VISUAL AREA (TO)
+# PRE-LANGUAGE VS. ENGLISH (TO): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_en_to <- anova_test(data = pre_en_to, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_en_to <- as.data.frame(get_anova_table(anova_pre_en_to, correction = "GG"))
+write.csv(anova_pre_en_to, file=file.path("ANOVA",paste0("visual_to_pre_en_anova.csv")))
+anova_pre_en_to
+```
+# PRE-LANGUAGE VS. ENGLISH (TO): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_to_pre_en <- pre_en_to %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_to_pre_en, file=file.path("ANOVA",paste0("visual_to_pre_en_pairwise.csv")))
+pairwise_to_pre_en
+```
+# PRE-LANGUAGE VS. GREEK (TO): ANOVA
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+anova_pre_gr_to <- anova_test(data = pre_gr_to, dv = AbsoluteNo, wid = Network, within = c(Condition,Neuron_Type,Color))
+anova_pre_gr_to <- as.data.frame(get_anova_table(anova_pre_gr_to, correction = "GG"))
+write.csv(anova_pre_gr_to, file=file.path("ANOVA",paste0("visual_to_pre_gr_anova.csv")))
+anova_pre_gr_to
+```
+# PRE-LANGUAGE VS. GREEK (TO): POST-HOC
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pairwise_to_pre_gr <- pre_gr_to %>% group_by(Neuron_Type, Color) %>% pairwise_t_test(AbsoluteNo ~ Condition, paired = TRUE)
+write.csv(pairwise_to_pre_gr, file=file.path("ANOVA",paste0("visual_to_pre_gr_pairwise.csv")))
+pairwise_to_pre_gr
+```
+# SHARED NEURONS (TO): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_to_shared <- pre_en_to %>% filter(Neuron_Type %in% c("Shared"))
+pre_gr_to_shared <- pre_gr_to %>% filter(Neuron_Type %in% c("Shared"))
+ansh_sum_st1_en <- summarySE(pre_en_to_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+ansh_sum_st1_gr <- summarySE(pre_gr_to_shared, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+to_ansh_plot_st1_en <- ggplot(ansh_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 30) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_to_pre_en[pairwise_to_pre_en$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(-3,12), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Secondary visual area (TO), shared") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+to_ansh_plot_st1_gr <- ggplot(ansh_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(-3, 30) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_to_pre_gr[pairwise_to_pre_gr$Neuron_Type == 'Shared',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(-3,12), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+to_ansh_plot_st1_en_gr <- grid.arrange(to_ansh_plot_st1_en, to_ansh_plot_st1_gr, ncol=2)
+ggsave(to_ansh_plot_st1_en_gr, file=file.path("ANOVA",paste0("visual_to_shared_boxplot.png")))
+```
+# UNIQUE NEURONS (TO): BOXPLOT
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+pre_en_to_unique <- pre_en_to %>% filter(Neuron_Type %in% c("Unique"))
+pre_gr_to_unique <- pre_gr_to %>% filter(Neuron_Type %in% c("Unique"))
+anun_sum_st1_en <- summarySE(pre_en_to_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+anun_sum_st1_gr <- summarySE(pre_gr_to_unique, measurevar="AbsoluteNo", groupvars=c("Color","Condition"))
+
+to_anun_plot_st1_en <- ggplot(anun_sum_st1_en,aes(x=factor(Condition, level=c("Pre-Language", "English")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(0, 32) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_to_pre_en[pairwise_to_pre_en$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(10,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("Secondary visual area (TO), unique") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+to_anun_plot_st1_gr <- ggplot(anun_sum_st1_gr,aes(x=factor(Condition, level=c("Pre-Language", "Greek")), color=Color))+ 
+  geom_boxplot(aes(middle=AbsoluteNo,lower=AbsoluteNo-se,upper=AbsoluteNo+se,ymin=AbsoluteNo-sd,ymax=AbsoluteNo+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(0, 32) + labs(y="", x ="") +
+  stat_pvalue_manual(data = pairwise_to_pre_gr[pairwise_to_pre_gr$Neuron_Type == 'Unique',], label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(10,0), color="Color", tip.length = 0, label.size = 8) +
+  ggtitle("") +
+  theme(plot.title = element_text(size = 21, hjust = 0.5), axis.text=element_text(size=18, color ="black"), legend.position="top", legend.key.size = unit(0.7, 'cm'), legend.title = element_text(size=18), legend.text = element_text(size=16))
+
+to_anun_plot_st1_en_gr <- grid.arrange(to_anun_plot_st1_en, to_anun_plot_st1_gr, ncol=2)
+ggsave(to_anun_plot_st1_en_gr, file=file.path("ANOVA",paste0("visual_to_unique_boxplot.png")))
+```
+

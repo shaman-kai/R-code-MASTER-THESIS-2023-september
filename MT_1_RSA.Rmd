@@ -1,0 +1,324 @@
+---
+title: "CA Dissimilarity Analysis"
+author: "Kai Shaman"
+date: "12-09-2023"
+Note: For better quality of the figures, don't knit the document but right-click on the output of each chunk and save the image from there.
+Note: Make sure you run this script 3 times: for the Pre-Language, English and Greek condition separately (change the variables "condition" (line 19) and "file_name" (line 20)).
+---
+# LOAD PACKAGES
+```{r Loading the packages, include = FALSE}
+library(lattice)
+library(dplyr)
+library(viridis)
+```
+
+```{r General variables, include = FALSE}
+### Set general variables
+directory <- getwd() # get path to directory with files (in this case, they are in the same folder as the script)
+dir.create(file.path(getwd(), "Dissimilarities")) # create subfolder to save the results
+condition <- "Pre-Language" # set the condition name to be shown on the figures: "Pre-Language", "English", or "Greek"
+file_name <- "data_1Stage.csv" # set the name of the file: "data_1Stage.csv", "data_EN.csv", or "data_GR.csv"
+n <- 16 # set the number of network instances (overall, both valid and invalid)
+rejected <- c(6,11,13) # indicate invalid networks
+n_valid <- n-length(rejected) # save the number of valid networks
+m <- 8 # set the number of cell assemblies (patterns) in one data file
+ca_names <- c("Blue1","Blue2","Green1","Green2","Word1","Word2","Word3","Word4") # create a list of names for each pattern's cell assembly (will be used as column names)
+area_list <- c("V1","TO","AT","PFL","PML","M1L","A1","AB","PB","PFI","PMI","M1I") # create list of areas
+area_size <- 625 # number of neurons in one area
+interest <- c(1:4) # the CAs that we want to compare (in this case, CA1, CA2, CA3 and CA4)
+```
+
+```{r Preparing the raw data (single file), include = FALSE}
+### Run ONLY if you have data from all networks in one file, comment out if not
+ca_data <- read.csv(file_name, header=FALSE) # load the file
+ca_data <- data.frame(t(ca_data)) # transpose, if necessary
+ca_data <- ca_data[3:nrow(ca_data),] # delete the first 2 rows (the CA names)
+ca_data <- split.default(ca_data, gl(ncol(ca_data)/m, m)) # split the dataframe into a list of dataframes
+# Loop through each file, rename the columns and save in separate dataframes:
+ca_data_list <- list() # create empty list for a loop (it will be list of separate dataframes for each network)
+for(i in 1:n) {
+ tmp <- ca_data[[i]]
+ colnames(tmp) <- ca_names
+ ca_data_list[[i]] <- tmp}
+rm(tmp, ca_data) # remove the variables not needed anymore
+```
+
+```{r Adding areas, include = FALSE}
+### Add info about areas to each network's dataframe
+ca_data_list_areas <- list() # create empty list where dataframes with added info will be saved
+# Loop through the dataframes, add info about areas to each, and save in the new list
+for(i in 1:n) {
+ tmp <- ca_data_list[[i]]
+ tmp$Area <- rep(area_list, each=area_size)
+ ca_data_list_areas[[i]] <- tmp}
+```
+
+```{r Splitting data by area, include = FALSE}
+### In each network's dataframe, select rows containing info on CAs in the area(s) that you are interested in, make into a new dataframe; create list of dataframes for each area of interest across all networks
+list_visual <- list() # create an empty list for dataframes with info on the area or a region (a few areas)
+list_auditory <- list()
+list_articulatory <- list()
+list_hub <- list()
+list_all <- list()
+list_all_areas_no_motor <- list()
+list_v1 <- list()
+list_to <- list()
+list_at <- list()
+
+for(i in 1:n) {
+
+ df_visual <- ca_data_list_areas[[i]] %>% filter(Area %in% c("V1","AT", "TO")) # in each network's dataframe, select rows with info on this area and save into separate dataframe
+ list_visual[[i]] <- df_visual # save the new dataframe into the area's list of dataframes
+ 
+ df_auditory <- ca_data_list_areas[[i]] %>% filter(Area %in% c("A1","AB","PB"))
+ list_auditory[[i]] <- df_auditory
+ 
+ df_articulatory <- ca_data_list_areas[[i]] %>% filter(Area %in% c("PFI","PMI","M1I"))
+ list_articulatory[[i]] <- df_articulatory
+ 
+ df_hub <- ca_data_list_areas[[i]] %>% filter(Area %in% c("AT","PFL","PB","PFI"))
+ list_hub[[i]] <- df_hub
+ 
+ df_all <- ca_data_list_areas[[i]] %>% filter(Area %in% c("V1","TO","AT","PFL","PML","M1L","A1","AB","PB","PFI","PMI","M1I"))
+ list_all[[i]] <- df_all
+ 
+ df_all_areas_no_motor <- ca_data_list_areas[[i]] %>% filter(Area %in% c("V1","TO","AT","PFL","A1","AB","PB","PFI","PMI","M1I"))
+ list_all_areas_no_motor[[i]] <- df_all_areas_no_motor
+ 
+ df_v1 <- ca_data_list_areas[[i]] %>% filter(Area %in% c("V1"))
+ list_v1[[i]] <- df_v1
+ 
+ df_to <- ca_data_list_areas[[i]] %>% filter(Area %in% c("TO"))
+ list_to[[i]] <- df_to
+ 
+ df_at <- ca_data_list_areas[[i]] %>% filter(Area %in% c("AT"))
+ list_at[[i]] <- df_at}
+```
+
+```{r Creating a dissimilarity matrix for each network and area separately, include = FALSE}
+# Loop through a list of dataframes of an area, 
+# for each network's dataframe within it select the CAs that you want to compare (in this case - from 1 to 4), 
+# transpose the selected columns using t() function (transposing is necessary for the dist() function), 
+# calculate distances with dist() selecting the distance measure that you want to use, save it as matrix, and 
+# save matrices for one area in a list
+matrices_visual <- list() # create an empty list for matrices with info on the area or a region (a few areas)
+matrices_auditory <- list()
+matrices_articulatory <- list()
+matrices_hub <- list()
+matrices_all <- list()
+matrices_all_areas_no_motor <- list()
+matrices_v1 <- list()
+matrices_to <- list()
+matrices_at <- list()
+
+for(i in 1:n) {
+
+m_visual <- as.matrix(dist(t(list_visual[[i]][interest]), method = "euclidean")) # select CAs, transpose them, calculate euclidean distances, save into a matrix
+matrices_visual[[i]] <- m_visual # save the new matrix into the area's list of matrices
+
+m_auditory <- as.matrix(dist(t(list_auditory[[i]][interest]), method = "euclidean"))
+matrices_auditory[[i]] <- m_auditory
+
+m_articulatory <- as.matrix(dist(t(list_articulatory[[i]][interest]), method = "euclidean"))
+matrices_articulatory[[i]] <- m_articulatory
+
+m_hub <- as.matrix(dist(t(list_hub[[i]][interest]), method = "euclidean"))
+matrices_hub[[i]] <- m_hub
+
+m_all <- as.matrix(dist(t(list_all[[i]][interest]), method = "euclidean"))
+matrices_all[[i]] <- m_all
+
+m_all_areas_no_motor <- as.matrix(dist(t(list_all_areas_no_motor[[i]][interest]), method = "euclidean"))
+matrices_all_areas_no_motor[[i]] <- m_all_areas_no_motor
+
+m_v1 <- as.matrix(dist(t(list_v1[[i]][interest]), method = "euclidean"))
+matrices_v1[[i]] <- m_v1
+
+m_to <- as.matrix(dist(t(list_to[[i]][interest]), method = "euclidean"))
+matrices_to[[i]] <- m_to
+
+m_at <- as.matrix(dist(t(list_at[[i]][interest]), method = "euclidean"))
+matrices_at[[i]] <- m_at}
+```
+
+```{r Removing rejected networks from the lists before averaging, include = FALSE}
+### Remove rejected networks defined above as the variable "rejected"
+matrices_visual_valid <- matrices_visual[- rejected]
+matrices_auditory_valid <- matrices_auditory[- rejected]
+matrices_articulatory_valid <- matrices_articulatory[- rejected]
+matrices_hub_valid <- matrices_hub[- rejected]
+matrices_all_valid <- matrices_all[- rejected]
+matrices_all_areas_no_motor_valid <- matrices_all_areas_no_motor[- rejected]
+matrices_v1_valid <- matrices_v1[- rejected]
+matrices_to_valid <- matrices_to[- rejected]
+matrices_at_valid <- matrices_at[- rejected]
+```
+
+```{r Computing dissimilarity matrices for each area averaged across networks, include = FALSE}
+### Compute the sum of all matrices that we want to run RSA on (cell by cell) in a list of matrices of one area, then divide (also cell by cell) by the number of matrices in the list (i.e. number of networks)
+matrix_average_visual <- Reduce("+", matrices_visual_valid)/length(matrices_visual_valid)
+matrix_average_auditory <- Reduce("+", matrices_auditory_valid)/length(matrices_auditory_valid)
+matrix_average_articulatory <- Reduce("+", matrices_articulatory_valid)/length(matrices_articulatory_valid)
+matrix_average_hub <- Reduce("+", matrices_hub_valid)/length(matrices_hub_valid)
+matrix_average_all <- Reduce("+", matrices_all_valid)/length(matrices_all_valid)
+matrix_average_all_areas_no_motor <- Reduce("+", matrices_all_areas_no_motor_valid)/length(matrices_all_areas_no_motor_valid)
+matrix_average_v1 <- Reduce("+", matrices_v1_valid)/length(matrices_v1_valid)
+matrix_average_to <- Reduce("+", matrices_to_valid)/length(matrices_to_valid)
+matrix_average_at <- Reduce("+", matrices_at_valid)/length(matrices_at_valid)
+```
+
+```{r Set the color palette and color scale for visualising averaged networks, include = FALSE}
+### Define the color palette and scale
+col_l <- colorRampPalette(c('#661c1c','#852a45','#a13572','#a33993','#a841ba','#9656c4','#7853c2', 
+                            '#5d55c2','#5062ba','#4a75b0','#498cb3','#439ea8','#38a191','#41a67d',
+                            '#45a867','#49ab51','#53ab43','#6dba41','#95c73e','#bad435','#d6cb31'))
+color_steps_av1 <- seq(0,6.6, by=0.01) # set the steps of the color scale for the averaged matrices
+color_steps_av2 <- seq(0,13.2, by=0.01) # set the steps of the color scale for the averaged matrices
+```
+
+### Dissimilarity matrix visualisations averaged across networks
+```{r, fig.height=15, echo = FALSE}
+### Visualize the averaged dissimilarity matrices
+plot.new()
+par(mfrow=c(3,5), cex=3, oma=c(0,0,16,0))
+print(levelplot(matrix_average_all, main=list(label='All', cex=3), at=color_steps_av2, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE), 
+                colorkey = list(labels=list(cex=2.5), space = "right")), split=c(1, 2, 5, 3), newpage=FALSE)
+print(levelplot(matrix_average_auditory, main=list(label='Auditory', cex=3), at=color_steps_av2, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE),
+                colorkey=list(labels=list(cex=2.5), space = "right")), split=c(2, 2, 5, 3), newpage=FALSE)
+print(levelplot(matrix_average_articulatory, main=list(label='Articulatory', cex=3), at=color_steps_av2, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE),
+                colorkey=list(labels=list(cex=2.5), space = "right")), split=c(3, 2, 5, 3), newpage=FALSE)
+print(levelplot(matrix_average_hub, main=list(label='Hub areas', cex=3), at=color_steps_av2, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE),
+                colorkey=list(labels=list(cex=2.5), space = "right")), split=c(4, 2, 5, 3), newpage=FALSE)
+print(levelplot(matrix_average_visual, main=list(label='Visual', cex=3), at=color_steps_av2, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE),
+                colorkey=list(labels=list(cex=2.5), space = "right")), split=c(5, 2, 5, 3), newpage=FALSE)
+title(condition, outer=TRUE)
+```
+
+### Dissimilarity matrix visualisations averaged across networks
+```{r, fig.height=15, echo = FALSE}
+### Visualize the averaged dissimilarity matrices
+plot.new()
+par(mfrow=c(3,5), cex=3, oma=c(0,0,16,0))
+print(levelplot(matrix_average_v1, main=list(label='V1', cex=3), at=color_steps_av1, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE),
+                colorkey=list(labels=list(cex=2.5), space = "right")), split=c(2, 2, 5, 3), newpage=FALSE)
+print(levelplot(matrix_average_to, main=list(label='TO', cex=3), at=color_steps_av1, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE),
+                colorkey=list(labels=list(cex=2.5), space = "right")), split=c(3, 2, 5, 3), newpage=FALSE)
+print(levelplot(matrix_average_at, main=list(label='AT', cex=3), at=color_steps_av1, col.regions=col_l, xlab=NULL, ylab=NULL, scales=list(draw=FALSE),
+                colorkey=list(labels=list(cex=2.5), space = "right")), split=c(4, 2, 5, 3), newpage=FALSE)
+title(condition, outer=TRUE)
+```
+
+```{r Setting the color palette and color scale for visualising single networks, include=FALSE}
+## Set the color palette and color scale
+col_l <- colorRampPalette(c(viridis(10)))
+color_steps_ind1 <- seq(0,6.6, by=0.01) # set the steps of the color scale for the individual areas
+color_steps_ind2 <- seq(0,13.8, by=0.01) # set the steps of the color scale for matrices across all areas
+```
+
+### Dissimilarity matrix visualisations for a single network
+```{r, fig.height=15, echo = FALSE}
+## Copy this as many times as the number of individual networks you want to look at, change the variable "nn" every time, the rest stays the same
+# nn <- 16 # set the current network number
+# plot.new()
+# par(mfrow=c(3,6), cex=2, oma=c(0,0,3,0))
+# print(levelplot(matrices_v1[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="V1", ylab=NULL, colorkey=TRUE), split=c(1, 1, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_to[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="TO", ylab=NULL, colorkey=TRUE), split=c(2, 1, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_at[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="AT", ylab=NULL, colorkey=TRUE), split=c(3, 1, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_pfl[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="PFL", ylab=NULL, colorkey=TRUE), split=c(4, 1, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_pml[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="PML", ylab=NULL, colorkey=TRUE), split=c(5, 1, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_m1l[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="M1L", ylab=NULL, colorkey=TRUE), split=c(6, 1, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_a1[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="A1", ylab=NULL, colorkey=TRUE), split=c(1, 2, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_ab[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="AB", ylab=NULL, colorkey=TRUE), split=c(2, 2, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_pb[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="PB", ylab=NULL, colorkey=TRUE), split=c(3, 2, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_pfi[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="PFI", ylab=NULL, colorkey=TRUE), split=c(4, 2, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_pmi[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="PMI", ylab=NULL, colorkey=TRUE), split=c(5, 2, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_m1i[[nn]], at=color_steps_ind1,col.regions=col_l, xlab="M1I", ylab=NULL, colorkey=TRUE), split=c(6, 2, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_visualnov1[[nn]], at=color_steps_ind2,col.regions=col_l, xlab="Visual (without V1)", ylab=NULL, colorkey=TRUE), split=c(1, 3, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_visual[[nn]], at=color_steps_ind2,col.regions=col_l, xlab="Visual", ylab=NULL, colorkey=TRUE), split=c(2, 3, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_auditory[[nn]], at=color_steps_ind2,col.regions=col_l, xlab="Auditory", ylab=NULL, colorkey=TRUE), split=c(3, 3, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_articulatory[[nn]], at=color_steps_ind2,col.regions=col_l, xlab="Articulatory", ylab=NULL, colorkey=TRUE), split=c(4, 3, 6, 3), newpage=FALSE)
+# print(levelplot(matrices_all_areas_no_motor[[nn]], at=color_steps_ind2,col.regions=col_l, xlab="ALL", ylab=NULL, colorkey=TRUE), split=c(5, 3, 6, 3), newpage=FALSE)
+# title(paste0(condition, ": Network ", nn), outer=T)
+```
+
+```{r Saving dissimilarity measures for subsequent ANOVA, include = FALSE}
+# Comment this section out if you don't want to run ANOVA on RSA results
+# Create dataframe with dissimilarity measures for each region that you want to compare with ANOVA
+# In this case, we want to compare 1) whole networks (without primary and secondary motor areas), 2) visual areas, and 3) extrasylvian areas
+
+# Create a dataframe for whole networks
+vector_all_blue <- c() # create empty vectors to put distance measures in
+vector_all_green <- c()
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs of the first and second patterns ("light blue" and "dark blue")
+  x <- matrices_all_areas_no_motor_valid[[i]][1,2]
+  vector_all_blue <- append(vector_all_blue,x)}  # put this distance in a vector
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs for 3rd and 4th patterns ("light Green" and "dark Green")
+  x <- matrices_all_areas_no_motor_valid[[i]][3,4]
+  vector_all_green <- append(vector_all_green,x)}  # put this distance in a vector
+# Make a new dataframe and put distance measures for blue and Green as columns
+diss_all_blue <- data.frame(Network=c(1:n_valid), Condition=condition, Area="All areas (without motor)", Color="Blue", Dissimilarity=vector_all_blue)
+diss_all_green <- data.frame(Network=c(1:n_valid), Condition=condition, Area="All areas (without motor)", Color="Green", Dissimilarity=vector_all_green)
+diss_all <- rbind(diss_all_blue, diss_all_green)
+write.csv(diss_all, file=file.path('Dissimilarities',paste0("Dissimilarities_All_", condition, ".csv")), row.names=FALSE)
+
+# Create a dataframe for hub areas
+vector_hub_blue <- c() # create empty vectors to put distance measures in
+vector_hub_green <- c()
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs of the first and second patterns ("light blue" and "dark blue")
+  x <- matrices_hub_valid[[i]][1,2]
+  vector_hub_blue <- append(vector_hub_blue,x)}  # put this distance in a vector
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs for 3rd and 4th patterns ("light Green" and "dark Green")
+  x <- matrices_hub_valid[[i]][3,4]
+  vector_hub_green <- append(vector_hub_green,x)}  # put this distance in a vector
+# Make a new dataframe and put distance measures for blue and Green as columns
+diss_hub_blue <- data.frame(Network=c(1:n_valid), Condition=condition, Area="Hub", Color="Blue", Dissimilarity=vector_hub_blue)
+diss_hub_green <- data.frame(Network=c(1:n_valid), Condition=condition, Area="Hub", Color="Green", Dissimilarity=vector_hub_green)
+diss_hub <- rbind(diss_hub_blue, diss_hub_green)
+write.csv(diss_hub, file=file.path('Dissimilarities',paste0("Dissimilarities_Hub_", condition, ".csv")), row.names=FALSE)
+
+# Create a dataframe for visual areas
+vector_visual_blue <- c() # create empty vectors to put distance measures in
+vector_visual_green <- c()
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs of the first and second patterns ("light blue" and "dark blue")
+  x <- matrices_visual_valid[[i]][1,2]
+  vector_visual_blue <- append(vector_visual_blue,x)}  # put this distance in a vector
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs for 3rd and 4th patterns ("light Green" and "dark Green")
+  x <- matrices_visual_valid[[i]][3,4]
+  vector_visual_green <- append(vector_visual_green,x)}  # put this distance in a vector
+# Make a new dataframe and put distance measures for blue and Green as columns
+diss_visual_blue <- data.frame(Network=c(1:n_valid), Condition=condition, Area="Visual", Color="Blue", Dissimilarity=vector_visual_blue)
+diss_visual_green <- data.frame(Network=c(1:n_valid), Condition=condition, Area="Visual", Color="Green", Dissimilarity=vector_visual_green)
+diss_visual <- rbind(diss_visual_blue, diss_visual_green)
+write.csv(diss_visual, file=file.path('Dissimilarities',paste0("Dissimilarities_Visual_", condition, ".csv")), row.names=FALSE)
+
+# Create a dataframe for TO
+vector_to_blue <- c() # create empty vectors to put distance measures in
+vector_to_green <- c()
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs of the first and second patterns ("light blue" and "dark blue")
+  x <- matrices_to_valid[[i]][1,2]
+  vector_to_blue <- append(vector_to_blue,x)}  # put this distance in a vector
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs for 3rd and 4th patterns ("light Green" and "dark Green")
+  x <- matrices_to_valid[[i]][3,4]
+  vector_to_green <- append(vector_to_green,x)}  # put this distance in a vector
+# Make a new dataframe and put distance measures for blue and Green as columns
+diss_to_blue <- data.frame(Network=c(1:n_valid), Condition=condition, Area="TO", Color="Blue", Dissimilarity=vector_to_blue)
+diss_to_green <- data.frame(Network=c(1:n_valid), Condition=condition, Area="TO", Color="Green", Dissimilarity=vector_to_green)
+diss_to <- rbind(diss_to_blue, diss_to_green)
+write.csv(diss_to, file=file.path('Dissimilarities',paste0("Dissimilarities_TO_", condition, ".csv")), row.names=FALSE)
+
+# Create a dataframe for AT
+vector_at_blue <- c() # create empty vectors to put distance measures in
+vector_at_green <- c()
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs of the first and second patterns ("light blue" and "dark blue")
+  x <- matrices_at_valid[[i]][1,2]
+  vector_at_blue <- append(vector_at_blue,x)}  # put this distance in a vector
+for(i in 1:n_valid){         # go through each matrix and get distance between CAs for 3rd and 4th patterns ("light Green" and "dark Green")
+  x <- matrices_at_valid[[i]][3,4]
+  vector_at_green <- append(vector_at_green,x)}  # put this distance in a vector
+# Make a new dataframe and put distance measures for blue and Green as columns
+diss_at_blue <- data.frame(Network=c(1:n_valid), Condition=condition, Area="AT", Color="Blue", Dissimilarity=vector_at_blue)
+diss_at_green <- data.frame(Network=c(1:n_valid), Condition=condition, Area="AT", Color="Green", Dissimilarity=vector_at_green)
+diss_at <- rbind(diss_at_blue, diss_at_green)
+write.csv(diss_at, file=file.path('Dissimilarities',paste0("Dissimilarities_AT_", condition, ".csv")), row.names=FALSE)
+```
+

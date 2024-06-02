@@ -1,0 +1,147 @@
+---
+title: "CA Dissimilarity Analysis ANOVA"
+author: "Kai Shaman"
+date: "12-09-2023"
+Note: Make sure you run this script separately for each condition you are interested in (change the variables in line 23, 24, 25, 26).
+---
+# HUB AREAS
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# LOAD PACKAGES
+library(rstatix)
+library(ggplot2)
+library(data.table)
+library(ggpubr)
+library(Rmisc)
+library(gridExtra)
+options(scipen = 999)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# GLOBAL VARIABLES
+dir.create(file.path(getwd(), "RSA_ANOVA")) # create subfolder to save the results
+directory <- file.path(getwd(), "Dissimilarities") # get path to directory with files
+setwd(directory)
+
+list_files <- list.files(path=directory, pattern="Dissimilarities_All", all.files=TRUE,full.names=TRUE) # get list of relevant csv files. Choose one of the following: "Dissimilarities_All", "Dissimilarities_Hub", "Dissimilarities_Visual", "Dissimilarities_AT", "Dissimilarities_TO"
+figurename = "RSA_ANOVA_All_" # set a figure name: "RSA_ANOVA_All_", "RSA_ANOVA_Hub_", "RSA_ANOVA_Visual_", "RSA_ANOVA_Visual_Hub_", or "RSA_ANOVA_Visual_Secondary_"
+plotname = "Dissimilarity (all areas)" # set a plot name: "Dissimilarity (all areas)", "Dissimilarity (hub areas)", "Dissimilarity (visual areas)", "Dissimilarity (visual hub area (AT))", or "Dissimilarity (secondary visual area (TO))"
+figuretitle = "All areas" # set a figure title: "All areas", "Hub areas", "Visual areas", "Visual hub (AT)", or "Secondary visual area (TO)"
+
+# LOAD DATAFRAMES WITH DISSIMILARITY MEASURES FOR FOR PLOTTING
+list_df <- list(read.csv(list_files[[1]]),read.csv(list_files[[2]]),read.csv(list_files[[3]])) # read the csv files and put into a list of dataframes
+df <- rbindlist(list_df) # turn the list of dataframes into a single dataframe in vertical format
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# DESCRIPTIVES
+df %>% group_by(Condition, Color) %>% get_summary_stats(Dissimilarity, type = "mean_sd")
+# ASSUMPTION CHECKS
+df %>% group_by(Condition, Color) %>% identify_outliers(Dissimilarity) # CHECK WHETHER THERE ARE EXTREME OUTLIERS IN THE DATA
+df %>% group_by(Condition, Color) %>% shapiro_test(Dissimilarity) # CHECK NORMALITY
+  ggqqplot(df, "Dissimilarity", ggtheme = theme_bw()) + facet_grid(Color ~ Condition, labeller = "label_both")
+df %>% group_by(Color) %>% levene_test(Dissimilarity ~ Condition) # CHECK HOMOGENEITY
+```
+
+# 1STAGE VS. ENGLISH + 1ST STAGE VS. Greek
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# ANOVA TABLE
+res.aov <- anova_test(data = df, dv = Dissimilarity, wid = Network, within = c(Condition,Color))
+anova_table <- as.data.frame(get_anova_table(res.aov, correction = "GG"))
+anova_table
+write.csv(anova_table, file=file.path('RSA_ANOVA',paste0(figurename, "1st_en_1st_ru_anova_table.csv")))
+```
+
+```{r}
+# SEPARATE ANOVA: 1 STAGE VS. ENGLISH
+st1_en <- df %>% filter(Condition %in% c("Pre-Language", "English"))
+res.aov_1st_en <- anova_test(data = st1_en, dv = Dissimilarity, wid = Network, within = c(Condition,Color))
+anova_table_1st_en <- as.data.frame(get_anova_table(res.aov_1st_en, correction = "GG"))
+anova_table_1st_en
+write.csv(anova_table_1st_en, file=file.path('RSA_ANOVA',paste0(figurename, "1st_en_anova_table.csv")))
+```
+
+```{r}
+# SEPARATE ANOVA: 1 STAGE VS. Greek
+st1_ru <- df %>% filter(Condition %in% c("Pre-Language", "Greek"))
+res.aov_1st_ru <- anova_test(data = st1_ru, dv = Dissimilarity, wid = Network, within = c(Condition,Color))
+anova_table_1st_ru <- as.data.frame(get_anova_table(res.aov_1st_ru, correction = "GG"))
+anova_table_1st_ru
+write.csv(anova_table_1st_ru, file=file.path('RSA_ANOVA',paste0(figurename, "1st_ru_anova_table.csv")))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# POST-HOC PAIRWISE T-TESTS: 1 STAGE VS. ENGLISH
+pairwise_st1_en <- st1_en %>% group_by(Color) %>% pairwise_t_test(Dissimilarity ~ Condition, paired = TRUE)
+pairwise_st1_en
+write.csv(pairwise_st1_en, file=file.path('RSA_ANOVA',paste0(figurename, "1st_en_pairwise.csv")))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# POST-HOC PAIRWISE T-TESTS: 1 STAGE VS. Greek
+pairwise_st1_ru <- st1_ru %>% group_by(Color) %>% pairwise_t_test(Dissimilarity ~ Condition, paired = TRUE)
+pairwise_st1_ru
+write.csv(pairwise_st1_ru, file=file.path('RSA_ANOVA',paste0(figurename, "1st_ru_pairwise.csv")))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# BOXPLOT
+df_sum <- summarySE(df, measurevar="Dissimilarity", groupvars=c("Color","Condition"))
+stage1_en <- df_sum %>% filter(Condition %in% c("Pre-Language", "English")) # Filter data for pairwise plotting
+stage1_ru <- df_sum %>% filter(Condition %in% c("Pre-Language", "Greek")) # Filter data for pairwise plotting
+
+lim_upper_en <- ceiling(max(stage1_en$Dissimilarity+stage1_en$sd))
+lim_upper_ru <- ceiling(max(stage1_ru$Dissimilarity+stage1_ru$sd))
+lim_lower_en <- floor(min(stage1_en$Dissimilarity-stage1_en$sd))
+lim_lower_ru <- floor(min(stage1_ru$Dissimilarity-stage1_ru$sd))
+
+p_en <- ggplot(stage1_en,aes(x=Condition, color=Color))+ 
+  geom_boxplot(aes(middle=Dissimilarity,lower=Dissimilarity-se,upper=Dissimilarity+se,ymin=Dissimilarity-sd,ymax=Dissimilarity+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(min(lim_lower_en,lim_lower_ru), max(lim_upper_en,lim_upper_ru)) + theme(legend.position="top") + labs(y="dissimilarity", x ="Condition") +
+  stat_pvalue_manual(data = pairwise_st1_en, label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(lim_upper_en,lim_lower_en), color="Color", tip.length = 0)  +
+  ggtitle(plotname)
+p_ru <- ggplot(stage1_ru,aes(x=Condition, color=Color))+ 
+  geom_boxplot(aes(middle=Dissimilarity,lower=Dissimilarity-se,upper=Dissimilarity+se,ymin=Dissimilarity-sd,ymax=Dissimilarity+sd),stat="identity") +
+  scale_color_manual(breaks = c("Blue", "Green"),values=c("blue", "darkgreen")) + ylim(min(lim_lower_en,lim_lower_ru), max(lim_upper_en,lim_upper_ru)) + theme(legend.position="top") + labs(y="dissimilarity", x ="Condition") +
+  stat_pvalue_manual(data = pairwise_st1_ru, label = "p.adj.signif", xmin = "group1", xmax="group2",y.position = c(lim_upper_ru,lim_lower_ru), color="Color", tip.length = 0)  +
+  ggtitle("")
+p_en_ru <- grid.arrange(p_en, p_ru, ncol=2)
+ggsave(p_en_ru, file=file.path('RSA_ANOVA',paste0(figurename, "1st_en_1st_ru_anova_boxplot.png")))
+
+```
+
+
+# ENGLISH VS. Greek
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Filter data for English vs. Greek ANOVA
+en_ru <- df %>% filter(Condition %in% c("English", "Greek"))
+# ANOVA TABLE
+res.aov <- anova_test(data = en_ru, dv = Dissimilarity, wid = Network, within = c(Condition,Color))
+anova_table_en_ru <- as.data.frame(get_anova_table(res.aov, correction = "GG"))
+anova_table_en_ru
+write.csv(anova_table_en_ru, file=file.path('RSA_ANOVA',paste0(figurename, "en_ru_anova_table.csv")))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# POST-HOC PAIRWISE T-TESTS
+pairwise_en_ru <- en_ru %>% group_by(Color) %>% pairwise_t_test(Dissimilarity ~ Condition, paired = TRUE)
+pairwise_en_ru
+write.csv(pairwise_en_ru, file=file.path('RSA_ANOVA',paste0(figurename, "en_ru_pairwise.csv")))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# BOXPLOT
+en_ru_sum <- summarySE(en_ru, measurevar="Dissimilarity", groupvars=c("Color","Condition"))
+
+lim_upper_en_ru <- ceiling(max(en_ru_sum$Dissimilarity+en_ru_sum$sd))
+
+p_en_ru <- ggplot(en_ru_sum,aes(x=Color, color=Condition))+ 
+  geom_boxplot(aes(middle=Dissimilarity,lower=Dissimilarity-se,upper=Dissimilarity+se,ymin=Dissimilarity-sd,ymax=Dissimilarity+sd),stat="identity") +
+  scale_color_manual(breaks = c("English", "Greek"),values=c("black", "brown")) + 
+  stat_pvalue_manual(data = pairwise_en_ru, label = "p.adj.signif",x = "Color", y.position = c(lim_upper_en_ru,lim_upper_en_ru), label.size = 10) +
+  labs(y="", x ="") +
+  ggtitle(figuretitle) +
+  theme(legend.position="top", plot.title = element_text(size = 40, hjust = 0.5), axis.title=element_text(size=35), axis.text=element_text(size=30, color ="black"), legend.key.size = unit(1, 'cm'), legend.title = element_text(size=30), legend.text = element_text(size=28))
+ggsave(p_en_ru, file=file.path('RSA_ANOVA',paste0(figurename, "en_ru_anova_boxplot.png")))
+p_en_ru
+```
+
